@@ -79,6 +79,10 @@
   background: #e3e3e3;
 }
 
+.preview-pane .invoice-page {
+  margin: 0 auto;
+}
+
 /* Narrower screens: form above the preview. The invoice itself is never scaled. */
 @media (max-width: 1439px) {
   .app {
@@ -106,5 +110,9 @@
     padding: 0;
     background: none;
     border: 0;
+  }
+
+  .preview-pane .invoice-page {
+    margin: 0;
   }
 }
