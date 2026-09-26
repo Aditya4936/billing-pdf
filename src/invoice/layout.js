@@ -208,6 +208,9 @@ export const AMOUNT_SUMMARY = {
   totalTaxWords: at(103.8, 917, VERDANA_8_I),
   billAmountLabel: at(40.8, 944.796, VERDANA_7_B),
   billAmountWords: at(111.8, 947, VERDANA_8_I),
+  // Amounts in words wrap onto a second line before reaching the tax summary divider.
+  wordsRight: 525.8,
+  wordsLineHeight: 12,
   grandTotalPanel: { x: 529.8, y: 965.8, width: 224, height: 24 },
   grandTotalRule: { y: 965.8, x1: 529.8, x2: 753.8 },
   grandTotalLabel: at(534.8, 982.652, VERDANA_9_B),

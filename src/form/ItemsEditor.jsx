@@ -1,7 +1,7 @@
 import { formatAmount } from '../utils/format.js';
 
 const COLUMNS = [
-  { key: 'name', label: 'Product Name', maxLength: 32 },
+  { key: 'name', label: 'Product Name', maxLength: 28 },
   { key: 'hsn', label: 'HSN/SAC', maxLength: 10 },
   { key: 'size', label: 'Size', maxLength: 16 },
   { key: 'grade', label: 'Grade', maxLength: 10 },

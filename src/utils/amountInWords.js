@@ -38,6 +38,7 @@ export function numberToWords(value) {
 
 /** 14160 -> "Fourteen Thousand One Hundred Sixty Only" (paise are added when present). */
 export function amountInWords(amount) {
+  if (amount < 0) return `Minus ${amountInWords(-amount)}`;
   const rupees = Math.floor(amount);
   const paise = Math.round((amount - rupees) * 100);
 
