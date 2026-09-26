@@ -1,0 +1,32 @@
+/*
+ * Paper setup for Print / "Save as PDF": the reference page is 793 x 1122 px
+ * (594.75 x 841.5 pt). Zero margins, so the invoice's coordinates land on the
+ * paper unchanged and the browser has no room for headers or footers.
+ */
+@page {
+  size: 793px 1122px;
+  margin: 0;
+}
+
+:root {
+  color-scheme: light;
+  font: 13px/1.4 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: #1f1f1f;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #fff;
+}
+
+/* Print: only the invoice page, at 100%, with nothing around it. */
+@media print {
+  .screen-only {
+    display: none !important;
+  }
+}

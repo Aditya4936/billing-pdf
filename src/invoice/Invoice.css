@@ -1,0 +1,84 @@
+/*
+ * Invoice page styles.
+ *
+ * The page is a fixed 793 x 1122 px SVG (= 594.75 x 841.5 pt, the reference MediaBox).
+ * Geometry lives in layout.js; this file defines the stroke, fill and type styles.
+ */
+
+.invoice-page {
+  display: block;
+  flex: none;
+  width: 793px;
+  height: 1122px;
+  background: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* Every rule in the reference is a 1pt black stroke (butt caps, miter joins). */
+.invoice-page .rule {
+  fill: none;
+  stroke: #000;
+  stroke-width: 1pt;
+}
+
+/* Shaded panels: 0.918 grey fill (#EAEAEA) with the same 1pt black border. */
+.invoice-page .panel {
+  fill: #eaeaea;
+  stroke: #000;
+  stroke-width: 1pt;
+}
+
+/* Text is placed by baseline. PDF text runs have no kerning or ligatures. */
+.invoice-page .txt {
+  fill: #000;
+  white-space: pre;
+  font-kerning: none;
+  font-variant-ligatures: none;
+}
+
+/* The three families of the reference PDF (it does not embed them either). */
+.invoice-page .ff-verdana {
+  font-family: Verdana, 'DejaVu Sans', sans-serif;
+}
+
+.invoice-page .ff-tahoma {
+  font-family: Tahoma, 'DejaVu Sans', sans-serif;
+}
+
+.invoice-page .ff-times {
+  font-family: 'Times New Roman', 'Liberation Serif', Times, serif;
+}
+
+.invoice-page .bold {
+  font-weight: 700;
+}
+
+.invoice-page .italic {
+  font-style: italic;
+}
+
+/* Type sizes used on the invoice, in points as in the PDF. */
+.invoice-page .pt-7 {
+  font-size: 7pt;
+}
+
+.invoice-page .pt-8 {
+  font-size: 8pt;
+}
+
+.invoice-page .pt-9 {
+  font-size: 9pt;
+}
+
+.invoice-page .pt-10 {
+  font-size: 10pt;
+}
+
+.invoice-page .pt-11 {
+  font-size: 11pt;
+}
+
+.invoice-page .pt-18 {
+  font-size: 18pt;
+}
