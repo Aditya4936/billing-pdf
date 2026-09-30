@@ -1,5 +1,6 @@
 import './App.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import Invoice from './invoice/Invoice.jsx';
 import InvoiceForm from './form/InvoiceForm.jsx';
 import { invoice as sampleInvoice } from './data/invoice.js';
@@ -74,6 +75,7 @@ export default function App() {
           <Invoice ref={pageRef} invoice={invoice} />
         </section>
       </main>
+      <Analytics />
     </div>
   );
 }
