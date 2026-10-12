@@ -21,6 +21,8 @@ export default function LoginPage() {
 
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
+  // Used by the "Create an account" link below, which is switched off for now (commented out).
+  // eslint-disable-next-line no-unused-vars
   function switchMode() {
     setMode(creating ? 'login' : 'register');
     setError('');

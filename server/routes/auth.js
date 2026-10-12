@@ -13,7 +13,7 @@ const DECOY_HASH = bcrypt.hashSync('not-a-real-password', BCRYPT_COST);
 const publicUser = (user) => ({ id: String(user._id), name: user.name, email: user.email });
 const asText = (value) => (typeof value === 'string' ? value.trim() : '');
 
-export function authRouter({ sessions }) {
+export function authRouter({ sessions, allowSignup = true }) {
   const router = Router();
 
   // Slows down password guessing: 30 attempts per 15 minutes per address.
@@ -26,6 +26,8 @@ export function authRouter({ sessions }) {
   });
 
   router.post('/register', attemptLimit, async (req, res) => {
+    if (!allowSignup) throw new HttpError(403, 'New accounts are turned off on this server. Ask the owner for access.');
+
     const name = asText(req.body?.name);
     const email = asText(req.body?.email).toLowerCase();
     const password = typeof req.body?.password === 'string' ? req.body.password : '';

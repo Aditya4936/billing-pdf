@@ -24,7 +24,7 @@ export function createApp(config) {
   app.use(cookieParser());
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
-  app.use('/api/auth', authRouter({ sessions }));
+  app.use('/api/auth', authRouter({ sessions, allowSignup: config.allowSignup }));
   app.use('/api/profile', profileRouter({ sessions }));
   app.use('/api/customers', customersRouter({ sessions }));
   app.use('/api/invoices', invoicesRouter({ sessions }));

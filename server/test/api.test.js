@@ -448,3 +448,28 @@ describe('invoices, profile, customers and stats', () => {
     assert.equal((await owner.call('DELETE', `/api/customers/${customer.id}`)).status, 404);
   });
 });
+
+describe('sign-ups can be turned off', () => {
+  test('ALLOW_SIGNUP=false refuses new accounts, but existing accounts can still log in', async () => {
+    const closedServer = createApp({ ...loadConfig(), allowSignup: false }).listen(0);
+    await new Promise((resolve) => closedServer.once('listening', resolve));
+    try {
+      const url = `http://127.0.0.1:${closedServer.address().port}`;
+      const post = (path, body) =>
+        fetch(`${url}${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+      const refused = await post('/api/auth/register', { name: 'New', email: 'new@example.com', password: 'long-enough-pass' });
+      assert.equal(refused.status, 403);
+      assert.match((await refused.json()).error, /turned off/);
+
+      // The account registered in the first suite is unaffected.
+      assert.equal((await post('/api/auth/login', { email: 'aditya@example.com', password: 'correct horse' })).status, 200);
+    } finally {
+      await new Promise((resolve) => closedServer.close(resolve));
+    }
+  });
+});

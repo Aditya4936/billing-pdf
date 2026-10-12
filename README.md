@@ -32,6 +32,7 @@ npm run dev              # app: http://localhost:5173  (API: http://localhost:40
 | --- | --- | --- |
 | `MONGOURL` | yes | MongoDB connection string |
 | `JWT_SECRET` | yes | 32+ random characters that sign login cookies. `node -p "require('crypto').randomBytes(48).toString('hex')"` makes one |
+| `ALLOW_SIGNUP` | no | `false` refuses new accounts (the login page has no sign-up link, but the API would still accept them). Set it once your own account exists |
 | `MONGO_DB` | no | Database name (default `billing-pdf`; the URL itself has none) |
 | `PORT` | no | API port (default `4000`) |
 | `NODE_ENV=production` | no | Serve the built app and use secure cookies |
@@ -53,6 +54,12 @@ npm run lint
 To run in production: `npm run build`, then `NODE_ENV=production npm start`
 (set `MONGOURL` and `JWT_SECRET` in the host's environment). The app and API share one
 address, so no CORS setup is needed.
+
+On a host (Render, Railway, ...): the build command must install the dev dependencies,
+because Vite is one. Use `npm ci --include=dev && npm run build` (a plain `npm ci` fails
+with "vite not found" when the host sets `NODE_ENV=production` during the build), and
+`npm start` to run. Node 22 is pinned in `package.json` (`engines`), the version this was
+tested on. Behind a host's proxy also set `TRUST_PROXY=1`.
 
 ## Use
 

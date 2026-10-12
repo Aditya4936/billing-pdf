@@ -27,6 +27,8 @@ export function loadConfig() {
     mongoDb: process.env.MONGO_DB?.trim() || 'billing-pdf',
     jwtSecret,
     sessionDays: 7,
+    // Set ALLOW_SIGNUP=false once your own account exists, so strangers cannot register.
+    allowSignup: process.env.ALLOW_SIGNUP?.trim().toLowerCase() !== 'false',
     cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : isProd,
     trustProxy: process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY : false,
     distDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist'),
