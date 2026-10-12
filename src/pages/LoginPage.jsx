@@ -103,12 +103,12 @@ export default function LoginPage() {
           {isSubmitting ? (creating ? 'Creating account…' : 'Logging in…') : creating ? 'Create account' : 'Log in'}
         </button>
 
-        <p className="login-switch">
+        {/* <p className="login-switch">
           {creating ? 'Already have an account?' : 'New here?'}{' '}
           <button type="button" className="link-button" onClick={switchMode}>
             {creating ? 'Log in' : 'Create an account'}
           </button>
-        </p>
+        </p> */}
       </form>
     </main>
   );
