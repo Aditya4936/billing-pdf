@@ -1,4 +1,5 @@
 import { formatDisplayDate } from '../utils/date.js';
+import { invoice as sampleInvoice } from './invoice.js';
 
 /** Tax rows for each GST type. The rate is split evenly between the rows. */
 export const TAX_TYPES = {
@@ -67,6 +68,54 @@ export function nextInvoiceNo(invoiceNo) {
     }
   }
   return invoiceNo;
+}
+
+export const emptyCompany = () => ({
+  name: '',
+  addressLines: ['', ''],
+  email: '',
+  mobile: '',
+  pan: '',
+  gstin: '',
+  udyam: '',
+});
+
+export const emptyBank = () => ({ name: '', accountNo: '', ifsc: '' });
+
+/** The seller's main details: the part of a draft that is the same on every invoice. */
+export const sellerDetailsOf = (draft) => ({
+  company: draft.company,
+  bank: draft.bank,
+  terms: draft.terms,
+  jurisdiction: draft.jurisdiction,
+});
+
+/**
+ * A new, empty invoice for an account that has no draft in this browser. The seller,
+ * bank and terms come from the saved `profile` (null for a brand-new account); everything
+ * else starts blank, with the GST rates and memo type of the sample invoice.
+ */
+export function createBlankInvoice(profile) {
+  return {
+    ...sampleInvoice,
+    invoiceNo: '',
+    date: formatDisplayDate(new Date()),
+    company: emptyCompany(),
+    bank: emptyBank(),
+    buyer: emptyParty(),
+    shipToSameAsBuyer: true,
+    shipTo: emptyParty(),
+    transporter: { name: '', lrNo: '', vehicleNo: '' },
+    items: [emptyItem()],
+    note: '',
+    jurisdiction: '',
+    ...(profile && {
+      company: { ...emptyCompany(), ...profile.company },
+      bank: { ...emptyBank(), ...profile.bank },
+      terms: profile.terms,
+      jurisdiction: profile.jurisdiction ?? '',
+    }),
+  };
 }
 
 /**

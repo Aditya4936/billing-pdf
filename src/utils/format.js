@@ -16,3 +16,15 @@ const INDIAN_CURRENCY = new Intl.NumberFormat('en-IN', {
 
 /** 14160 -> "14,160.00", 141600 -> "1,41,600.00" (used for the Grand Total). */
 export const formatIndianAmount = (value) => INDIAN_CURRENCY.format(round2(value));
+
+/** 141600 -> "₹1,41,600.00" (history and dashboard). */
+export const formatRupees = (value) => `₹${formatIndianAmount(value)}`;
+
+/** Short labels for chart bars: 4500 -> "₹4.5K", 250000 -> "₹2.5L", 12000000 -> "₹1.2Cr". */
+export function formatCompactRupees(value) {
+  const trim = (n) => String(Math.round(n * 10) / 10);
+  if (value >= 1e7) return `₹${trim(value / 1e7)}Cr`;
+  if (value >= 1e5) return `₹${trim(value / 1e5)}L`;
+  if (value >= 1e3) return `₹${trim(value / 1e3)}K`;
+  return `₹${Math.round(value)}`;
+}

@@ -1,6 +1,6 @@
 import './InvoiceForm.css';
 import { PRODUCT_TABLE } from '../invoice/layout.js';
-import { TAX_TYPES, emptyItem, isBlankParty, taxTypeOf, taxesForType } from '../data/invoiceModel.js';
+import { TAX_TYPES, emptyItem, emptyParty, isBlankParty, taxTypeOf, taxesForType } from '../data/invoiceModel.js';
 import { formatAmount, formatIndianAmount } from '../utils/format.js';
 import { setIn } from '../utils/setIn.js';
 import {
@@ -12,6 +12,7 @@ import {
   SelectField,
   TextField,
 } from './fields.jsx';
+import CustomerPicker from './CustomerPicker.jsx';
 import ItemsEditor from './ItemsEditor.jsx';
 import PartyFields from './PartyFields.jsx';
 
@@ -21,11 +22,24 @@ const TAX_TYPE_OPTIONS = Object.entries(TAX_TYPES).map(([value, { label }]) => (
 // Three numbered terms plus the jurisdiction clause fill the terms area of the page.
 const TERM_SLOTS = 3;
 
-/** The billing form. `onChange` receives state updaters for the draft. */
-export default function InvoiceForm({ draft, totals, onChange }) {
+/**
+ * The billing form. `onChange` receives state updaters for the draft; `customers` are the
+ * buyers saved on the account, offered in the Buyer section.
+ */
+export default function InvoiceForm({ draft, totals, customers = [], onChange }) {
   // Change handler for the value at `path` in the draft.
   const field = (path) => (value) => onChange((current) => setIn(current, path, value));
   const fieldIn = (base) => (path) => field([...base, ...path]);
+
+  const pickCustomer = (details) =>
+    onChange((current) => ({
+      ...current,
+      buyer: {
+        ...emptyParty(),
+        ...details,
+        addressLines: [details.addressLines?.[0] ?? '', details.addressLines?.[1] ?? ''],
+      },
+    }));
 
   const setSameAsBuyer = (same) =>
     onChange((current) => ({
@@ -55,7 +69,7 @@ export default function InvoiceForm({ draft, totals, onChange }) {
         <SelectField span={1} label="Copy" value={draft.copy} options={COPY_LABELS} onChange={field(['copy'])} />
       </FormSection>
 
-      <FormSection title="Buyer (Bill To)">
+      <FormSection title="Buyer (Bill To)" aside={<CustomerPicker customers={customers} onPick={pickCustomer} />}>
         <PartyFields party={draft.buyer} field={fieldIn(['buyer'])} />
       </FormSection>
 
