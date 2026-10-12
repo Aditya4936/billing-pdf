@@ -9,8 +9,9 @@ preview and click **Download PDF**. The invoice looks exactly like
   The seller's main details (company, bank, terms, jurisdiction) are kept on the account, and
   every buyer is kept as a **saved buyer**. Items, prices and quantities are never stored as
   reusable details; they live only inside the invoice they belong to.
-- **History.** Search, filter by status or date, reopen, duplicate, download the PDF again,
-  mark paid / unpaid, delete, and export a CSV for your accountant.
+- **History.** Search, filter by status or date, reopen, duplicate, mark paid / unpaid,
+  delete, and export a CSV for your accountant. Every PDF you download is **stored as the
+  actual file**, so you can download exactly what you sent, again, any time.
 - **Dashboard.** Total sales, GST collected, invoices, amount still to receive, average
   invoice, buyers, sales by month, top buyers, top items and the latest invoices, for this
   month, the last 30 days, this financial year (April to March) or all time.
@@ -60,9 +61,14 @@ address, so no CORS setup is needed.
   rate, and a note. Seller, bank and terms details sit in the collapsed sections at the bottom.
 - **Save:** stores the invoice in history. Saving an invoice number that already exists
   updates that invoice (its paid / unpaid status and PDF count are kept).
-- **Download PDF:** saves `SalesBill_<invoice no>.pdf`, then stores the invoice in history.
-  If it cannot be stored (for example the buyer's name is missing) the PDF is still made and
-  the reason is shown.
+- **Download PDF:** saves `SalesBill_<invoice no>.pdf`, then stores the invoice in history
+  together with a copy of that PDF file. If it cannot be stored (for example the buyer's
+  name is missing) the PDF is still made and the reason is shown.
+- **PDFs in History:** the *PDF* button downloads the stored file. If the invoice was edited
+  after its last PDF, it makes a new one from the invoice as it is now (so the button always
+  gives the current invoice). Click the count (for example *2 · 12/10/2026*) to list every
+  stored file. The latest 10 per invoice are kept; deleting an invoice deletes its files.
+  *Print* is only counted: the browser's print dialog gives the app no file to keep.
 - **Print:** stores the invoice, then opens the browser print dialog. Choose *Save as PDF*
   for a PDF with the fonts embedded. Keep *Margins: Default* and *Scale: Default*; the page
   size is fixed by the page itself.
@@ -114,13 +120,16 @@ JSON over HTTP, cookie session (`httpOnly`, `SameSite=Lax`). Everything except
 | `GET /api/invoices?q&status&from&to&page&limit` | History |
 | `POST /api/invoices` `{ draft, event }` | Save (create, or update by invoice number) |
 | `GET /api/invoices/:id`, `DELETE` | One invoice with its full draft; delete |
-| `PATCH /api/invoices/:id/status`, `POST /api/invoices/:id/pdf` | Mark paid / unpaid; count a PDF |
+| `PATCH /api/invoices/:id/status` | Mark paid / unpaid |
+| `POST /api/invoices/:id/pdfs` (body: the PDF, `application/pdf`) | Store a PDF file for the invoice |
+| `GET /api/invoices/:id/pdfs`, `GET /api/invoices/:id/pdfs/:pdfId` | List stored PDFs; download one |
 | `GET /api/invoices/next-number`, `GET /api/invoices/export.csv` | Next number; CSV |
 | `GET /api/stats?from&to` | Dashboard numbers |
 
 MongoDB collections: `users` (with the seller profile), `customers`, `invoices` (searchable
-fields, calculated totals, status, PDF count, and the full form `draft`). Passwords are
-hashed with bcrypt; login attempts are rate limited.
+fields, calculated totals, status, PDF count, and the full form `draft`) and `invoicepdfs`
+(the PDF files, about 15 KB each, kept apart so listing invoices never loads them).
+Passwords are hashed with bcrypt; login attempts are rate limited.
 
 ## Project structure
 
@@ -129,7 +138,7 @@ server/
   index.js, app.js        start-up; Express app (helmet, JSON, cookies, routes)
   config.js, db.js        environment; MongoDB connection
   middleware/             sessions (JWT cookie), error handling
-  models/                 User (+ seller profile), Customer, Invoice, shared field shapes
+  models/                 User (+ seller profile), Customer, Invoice, InvoicePdf, shared field shapes
   routes/                 auth, profile, customers, invoices, stats
   lib/                    invoice validation + totals, filters, CSV, seller details
   test/api.test.js        API tests

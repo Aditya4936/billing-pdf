@@ -4,6 +4,13 @@ const pad = (n) => String(n).padStart(2, '0');
 export const formatDisplayDate = (date) =>
   `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
 
+/** A timestamp from the server -> "12/10/2026, 14:20" in local time. */
+export function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${formatDisplayDate(date)}, ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 /** Date -> "2026-09-25" in local time: the form the server's ?from= and ?to= filters expect. */
 export const toIsoDay = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 

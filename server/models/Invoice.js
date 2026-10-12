@@ -41,6 +41,11 @@ const invoiceSchema = new Schema(
     // PDF history: how many times a PDF was downloaded or printed, and when last.
     pdfCount: { type: Number, default: 0 },
     lastPdfAt: Date,
+    // The newest stored PDF file (see InvoicePdf), and when the invoice's content last changed.
+    // The PDF is "up to date" when the content has not changed since it was made.
+    latestPdfId: { type: Schema.Types.ObjectId, ref: 'InvoicePdf' },
+    latestPdfAt: Date,
+    contentUpdatedAt: Date,
 
     draft: { type: draftSchema, required: true },
   },

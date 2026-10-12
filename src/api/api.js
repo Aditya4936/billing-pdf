@@ -14,14 +14,15 @@ export function setSessionExpiredHandler(handler) {
   onSessionExpired = handler;
 }
 
-async function request(method, url, body, { quiet401 = false } = {}) {
+/** `raw`: send `body` as it is with this content type (a file) instead of as JSON. */
+async function request(method, url, body, { quiet401 = false, raw = '' } = {}) {
   let response;
   try {
     response = await fetch(url, {
       method,
       credentials: 'same-origin',
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined ? undefined : { 'Content-Type': raw || 'application/json' },
+      body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiError('Could not reach the server. Check your connection and try again.', 0);
@@ -70,11 +71,16 @@ export const api = {
     list: (params) => get(`/api/invoices${query(params)}`),
     get: (id) => get(`/api/invoices/${id}`),
     nextNumber: () => get('/api/invoices/next-number'),
-    /** Saves (or updates) an invoice. `event`: 'save' | 'pdf' | 'print'. */
+    /** Saves (or updates) an invoice. `event`: 'save' | 'print' ('print' also counts as a PDF made). */
     save: (draft, event = 'save') => post('/api/invoices', { draft, event }),
     setStatus: (id, status) => request('PATCH', `/api/invoices/${id}/status`, { status }),
-    recordPdf: (id) => post(`/api/invoices/${id}/pdf`),
     remove: (id) => request('DELETE', `/api/invoices/${id}`),
+    /** Stores the PDF file (bytes) that was just made for an invoice. */
+    uploadPdf: (id, bytes) => request('POST', `/api/invoices/${id}/pdfs`, bytes, { raw: 'application/pdf' }),
+    /** The stored PDF files of an invoice, newest first. */
+    pdfs: (id) => get(`/api/invoices/${id}/pdfs`),
+    /** Link that downloads one stored PDF file. */
+    pdfUrl: (id, pdfId) => `/api/invoices/${id}/pdfs/${pdfId}`,
     /** URL of the CSV download for the same filters as the list. */
     csvUrl: (params) => `/api/invoices/export.csv${query(params)}`,
   },

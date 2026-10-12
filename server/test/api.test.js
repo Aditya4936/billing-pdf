@@ -13,6 +13,7 @@ process.env.MONGO_DB = `billing-pdf-test-${randomBytes(4).toString('hex')}`;
 const { loadConfig } = await import('../config.js');
 const { connectDb, disconnectDb } = await import('../db.js');
 const { createApp } = await import('../app.js');
+const { InvoicePdf } = await import('../models/InvoicePdf.js');
 
 let server;
 let base;
@@ -33,8 +34,34 @@ function client() {
       const data = type.includes('json') ? await response.json() : await response.text();
       return { status: response.status, data, headers: response.headers };
     },
+
+    /** POSTs a file as the raw request body. */
+    async upload(path, bytes, type = 'application/pdf') {
+      const response = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': type, ...(cookie && { Cookie: cookie }) },
+        body: bytes,
+      });
+      const text = await response.text();
+      let data = text;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // Not JSON: keep the text.
+      }
+      return { status: response.status, data };
+    },
+
+    /** GETs a file and returns its bytes. */
+    async download(path) {
+      const response = await fetch(`${base}${path}`, { headers: cookie ? { Cookie: cookie } : {} });
+      return { status: response.status, bytes: Buffer.from(await response.arrayBuffer()), headers: response.headers };
+    },
   };
 }
+
+const fakePdf = (size = 2000) =>
+  Buffer.concat([Buffer.from('%PDF-1.4\n'), randomBytes(size), Buffer.from('\n%%EOF')]);
 
 const party = (name, extra = {}) => ({
   name,
@@ -210,7 +237,7 @@ describe('invoices, profile, customers and stats', () => {
     await owner.call('PATCH', `/api/invoices/${id}/status`, { status: 'paid' });
 
     const items = [{ name: 'PLANET-1048', hsn: '69101000', qty: '10', rate: '1000' }];
-    const response = await owner.call('POST', '/api/invoices', { draft: draft({ items }), event: 'pdf' });
+    const response = await owner.call('POST', '/api/invoices', { draft: draft({ items }), event: 'print' });
     assert.equal(response.status, 200);
     assert.equal(response.data.created, false);
     assert.equal(response.data.invoice.id, id);
@@ -263,14 +290,87 @@ describe('invoices, profile, customers and stats', () => {
     assert.equal(invoice.draft.items[0].name, 'PLANET-1048');
   });
 
-  test('status can be changed back and PDF downloads are counted', async () => {
+  test('status can be changed back', async () => {
     const { id } = (await owner.call('GET', '/api/invoices?q=UI/003')).data.invoices[0];
     const unpaid = await owner.call('PATCH', `/api/invoices/${id}/status`, { status: 'unpaid' });
     assert.equal(unpaid.data.invoice.status, 'unpaid');
     assert.equal(unpaid.data.invoice.paidAt, null);
     assert.equal((await owner.call('PATCH', `/api/invoices/${id}/status`, { status: 'x' })).status, 400);
-    const pdf = await owner.call('POST', `/api/invoices/${id}/pdf`);
-    assert.equal(pdf.data.invoice.pdfCount, 1);
+  });
+
+  test('PDF files are stored byte for byte, listed and downloaded', async () => {
+    const { id } = (await owner.call('GET', '/api/invoices?q=UI/003')).data.invoices[0];
+    assert.equal((await owner.call('GET', `/api/invoices/${id}`)).data.invoice.pdf, null);
+
+    const bytes = fakePdf();
+    const stored = await owner.upload(`/api/invoices/${id}/pdfs`, bytes);
+    assert.equal(stored.status, 201);
+    assert.equal(stored.data.pdf.size, bytes.length);
+    assert.equal(stored.data.pdf.fileName, 'SalesBill_UI_003_26-27.pdf');
+    assert.equal(JSON.stringify(stored.data).includes('data'), false, 'file data must never be in JSON');
+    assert.equal(stored.data.invoice.pdfCount, 1);
+    assert.equal(stored.data.invoice.pdf.id, stored.data.pdf.id);
+    assert.equal(stored.data.invoice.pdf.upToDate, true);
+
+    const { pdfs } = (await owner.call('GET', `/api/invoices/${id}/pdfs`)).data;
+    assert.equal(pdfs.length, 1);
+    const file = await owner.download(`/api/invoices/${id}/pdfs/${pdfs[0].id}`);
+    assert.equal(file.status, 200);
+    assert.ok(file.bytes.equals(bytes), 'downloaded file differs from the uploaded one');
+    assert.equal(file.headers.get('content-type'), 'application/pdf');
+    assert.match(file.headers.get('content-disposition'), /attachment; filename="SalesBill_UI_003_26-27\.pdf"/);
+  });
+
+  test('only real PDF files are accepted', async () => {
+    const { id } = (await owner.call('GET', '/api/invoices?q=UI/003')).data.invoices[0];
+    const url = `/api/invoices/${id}/pdfs`;
+    assert.equal((await owner.upload(url, Buffer.from('<script>alert(1)</script>'))).status, 400);
+    assert.equal((await owner.upload(url, Buffer.alloc(0))).status, 400);
+    assert.equal((await owner.upload(url, fakePdf(), 'text/plain')).status, 400);
+    assert.equal((await owner.upload(url, fakePdf(1_500_000))).status, 413);
+    assert.equal((await owner.call('GET', `${url}`)).data.pdfs.length, 1, 'nothing extra was stored');
+  });
+
+  test('a PDF is out of date only when the invoice content changes', async () => {
+    const { id } = (await owner.call('GET', '/api/invoices?q=UI/003')).data.invoices[0];
+    const same = draft({ invoiceNo: 'UI/003/26-27', memoType: 'Cash Memo', buyer: party('WALK-IN', { gstin: '' }) });
+
+    // Saving identical content, or marking paid, leaves the PDF valid.
+    await owner.call('POST', '/api/invoices', { draft: same });
+    await owner.call('PATCH', `/api/invoices/${id}/status`, { status: 'paid' });
+    assert.equal((await owner.call('GET', `/api/invoices/${id}`)).data.invoice.pdf.upToDate, true);
+
+    // Changing an item makes it stale; a new PDF makes it current again.
+    const changed = { ...same, items: [{ name: 'PLANET-1048', hsn: '69101000', qty: '5', rate: '1500' }] };
+    await owner.call('POST', '/api/invoices', { draft: changed });
+    assert.equal((await owner.call('GET', `/api/invoices/${id}`)).data.invoice.pdf.upToDate, false);
+    const fresh = await owner.upload(`/api/invoices/${id}/pdfs`, fakePdf());
+    assert.equal(fresh.data.invoice.pdf.upToDate, true);
+    assert.equal(fresh.data.invoice.pdfCount, 2);
+
+    // Put the invoice back as the later tests expect it (10620 total, unpaid).
+    await owner.call('POST', '/api/invoices', { draft: same });
+    await owner.call('PATCH', `/api/invoices/${id}/status`, { status: 'unpaid' });
+  });
+
+  test('only the latest 10 PDF files of an invoice are kept', async () => {
+    const created = await owner.call('POST', '/api/invoices', { draft: draft({ invoiceNo: 'UI/020/26-27' }) });
+    const id = created.data.invoice.id;
+    const uploads = [];
+    for (let i = 0; i < 12; i += 1) {
+      const bytes = fakePdf(100 + i);
+      uploads.push(bytes);
+      assert.equal((await owner.upload(`/api/invoices/${id}/pdfs`, bytes)).status, 201);
+    }
+    const { pdfs } = (await owner.call('GET', `/api/invoices/${id}/pdfs`)).data;
+    assert.equal(pdfs.length, 10);
+    assert.equal(pdfs[0].size, uploads[11].length, 'newest first');
+    assert.equal(pdfs[9].size, uploads[2].length, 'the two oldest were removed');
+    assert.equal(await InvoicePdf.countDocuments({ invoice: id }), 10);
+    const latest = await owner.download(`/api/invoices/${id}/pdfs/${pdfs[0].id}`);
+    assert.ok(latest.bytes.equals(uploads[11]));
+    assert.equal((await owner.call('GET', `/api/invoices/${id}`)).data.invoice.pdfCount, 12);
+    await owner.call('DELETE', `/api/invoices/${id}`);
   });
 
   test('CSV export has the filtered rows and defuses spreadsheet formulas', async () => {
@@ -292,8 +392,16 @@ describe('invoices, profile, customers and stats', () => {
     const { id } = (await owner.call('GET', '/api/invoices')).data.invoices[0];
     assert.equal((await stranger.call('GET', `/api/invoices/${id}`)).status, 404);
     assert.equal((await stranger.call('PATCH', `/api/invoices/${id}/status`, { status: 'paid' })).status, 404);
-    assert.equal((await stranger.call('POST', `/api/invoices/${id}/pdf`)).status, 404);
     assert.equal((await stranger.call('DELETE', `/api/invoices/${id}`)).status, 404);
+
+    // Stored PDF files are private too: no listing, no download, no upload.
+    const { id: withPdf } = (await owner.call('GET', '/api/invoices?q=UI/003')).data.invoices[0];
+    const { pdfs } = (await owner.call('GET', `/api/invoices/${withPdf}/pdfs`)).data;
+    assert.ok(pdfs.length > 0);
+    assert.equal((await stranger.call('GET', `/api/invoices/${withPdf}/pdfs`)).status, 404);
+    assert.equal((await stranger.download(`/api/invoices/${withPdf}/pdfs/${pdfs[0].id}`)).status, 404);
+    assert.equal((await stranger.upload(`/api/invoices/${withPdf}/pdfs`, fakePdf())).status, 404);
+    assert.equal((await stranger.download(`/api/invoices/${withPdf}/pdfs/${pdfs[0].id}`)).bytes.includes('%PDF-'), false);
     assert.equal((await stranger.call('GET', '/api/invoices')).data.total, 0);
     assert.equal((await stranger.call('GET', '/api/customers')).data.customers.length, 0);
     assert.equal((await stranger.call('GET', '/api/profile')).data.profile, null);
@@ -326,9 +434,12 @@ describe('invoices, profile, customers and stats', () => {
     assert.deepEqual(none.topCustomers, []);
   });
 
-  test('deleting removes the invoice; saved buyers can be deleted too', async () => {
+  test('deleting removes the invoice and its PDF files; saved buyers can be deleted too', async () => {
     const { id } = (await owner.call('GET', '/api/invoices?q=UI/010')).data.invoices[0];
+    await owner.upload(`/api/invoices/${id}/pdfs`, fakePdf());
+    assert.equal(await InvoicePdf.countDocuments({ invoice: id }), 1);
     assert.equal((await owner.call('DELETE', `/api/invoices/${id}`)).status, 200);
+    assert.equal(await InvoicePdf.countDocuments({ invoice: id }), 0, 'PDF files must go with the invoice');
     assert.equal((await owner.call('GET', `/api/invoices/${id}`)).status, 404);
     assert.equal((await owner.call('GET', '/api/invoices')).data.total, 3);
 

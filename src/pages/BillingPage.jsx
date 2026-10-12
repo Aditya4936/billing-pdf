@@ -96,23 +96,38 @@ function InvoiceEditor({ user, initialDraft }) {
     return () => clearTimeout(timer);
   }, [sellerJson, syncSeller]);
 
-  /** Saves the invoice (and the seller and buyer details on it) to history. */
-  async function saveToHistory(event) {
+  /**
+   * Saves the invoice (and the seller and buyer details on it) to history. With `pdf` (the
+   * file that was just downloaded) the file is kept with the invoice too.
+   */
+  async function saveToHistory(event, pdf) {
     setNotice({ kind: 'busy', text: 'Saving…' });
+
+    let saved;
+    let created;
     try {
-      const { invoice: saved, created } = await api.invoices.save(draft, event);
-      markSaved(user.id, draft);
-      await syncSeller().catch(() => {});
-      loadCustomers();
-      setNotice({
-        kind: 'ok',
-        text: created ? `Invoice ${saved.invoiceNo} saved to history.` : `Invoice ${saved.invoiceNo} updated in history.`,
-      });
-      return true;
+      ({ invoice: saved, created } = await api.invoices.save(draft, event));
     } catch (error) {
       setNotice({ kind: 'error', text: `Not saved to history. ${error.message}` });
       return false;
     }
+    markSaved(user.id, draft);
+    await syncSeller().catch(() => {});
+    loadCustomers();
+
+    const done = created ? `Invoice ${saved.invoiceNo} saved to history` : `Invoice ${saved.invoiceNo} updated in history`;
+    if (!pdf) {
+      setNotice({ kind: 'ok', text: `${done}.` });
+      return true;
+    }
+    try {
+      await api.invoices.uploadPdf(saved.id, pdf);
+      setNotice({ kind: 'ok', text: `${done}, with its PDF.` });
+    } catch (error) {
+      // The invoice is saved and the PDF is already on this computer; only the copy is missing.
+      setNotice({ kind: 'error', text: `${done}, but a copy of the PDF could not be kept. ${error.message}` });
+    }
+    return true;
   }
 
   async function runBusy(task) {
@@ -128,15 +143,16 @@ function InvoiceEditor({ user, initialDraft }) {
 
   const downloadPdf = () =>
     runBusy(async () => {
+      let pdf;
       try {
-        const pdf = await createInvoicePdf(pageRef.current, { title: fileName });
+        pdf = await createInvoicePdf(pageRef.current, { title: fileName });
         downloadFile(pdf, `${fileName}.pdf`, 'application/pdf');
       } catch (error) {
         console.error(error);
         window.alert('Sorry, the PDF could not be created.');
         return;
       }
-      await saveToHistory('pdf');
+      await saveToHistory('save', pdf);
     });
 
   const print = () =>

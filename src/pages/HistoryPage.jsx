@@ -9,11 +9,64 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { downloadFile } from '../pdf/download.js';
 import { fileNameFor } from '../pdf/fileName.js';
 import { renderInvoicePdf } from '../pdf/renderInvoicePdf.jsx';
-import { formatDisplayDate, serverDateToDisplay } from '../utils/date.js';
+import { formatDateTime, formatDisplayDate, serverDateToDisplay } from '../utils/date.js';
 import { formatRupees } from '../utils/format.js';
 
 const PAGE_SIZE = 20;
 const NO_FILTERS = { q: '', status: '', from: '', to: '' };
+
+const formatSize = (bytes) => `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+/**
+ * How many PDFs were made for an invoice and when last. When files are kept, it expands to
+ * list them (newest first) with a download link each.
+ */
+function PdfVersions({ row }) {
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState({ pdfs: null, error: '' });
+  const newestId = row.pdf?.id;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let active = true;
+    api.invoices.pdfs(row.id).then(
+      ({ pdfs }) => active && setState({ pdfs, error: '' }),
+      (error) => active && setState({ pdfs: null, error: error.message }),
+    );
+    return () => {
+      active = false;
+    };
+  }, [open, row.id, newestId]); // A newer PDF refreshes the list while it is open.
+
+  if (row.pdfCount === 0) return 'None yet';
+  const summary = `${row.pdfCount} · ${formatDisplayDate(new Date(row.lastPdfAt))}`;
+  if (!row.pdf) return summary; // Printed only: there is no file to list.
+
+  return (
+    <div className="pdf-versions">
+      <button type="button" className="link-button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        {summary}
+      </button>
+      {open && (
+        <ul>
+          {state.error && <li>Could not load the files. {state.error}</li>}
+          {!state.pdfs && !state.error && <li>Loading…</li>}
+          {state.pdfs?.map((pdf) => (
+            <li key={pdf.id}>
+              <span>
+                {formatDateTime(pdf.createdAt)} · {formatSize(pdf.size)}
+              </span>
+              <a href={api.invoices.pdfUrl(row.id, pdf.id)} download>
+                Download
+              </a>
+            </li>
+          ))}
+          {state.pdfs?.length >= 10 && <li>The latest 10 files are kept.</li>}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /** Every invoice saved or downloaded: search, filter, reopen, duplicate, download again. */
 export default function HistoryPage() {
@@ -102,13 +155,19 @@ export default function HistoryPage() {
       navigate('/');
     });
 
-  const downloadPdf = (row) =>
+  // For an invoice without a current stored PDF (never downloaded, or edited since): make a
+  // new one from the invoice as it is now, download it and keep it as the newest version.
+  const makePdf = (row) =>
     onRow(row, 'Could not make the PDF.', async () => {
       const { invoice } = await api.invoices.get(row.id);
       const name = fileNameFor(invoice.invoiceNo);
       const pdf = await renderInvoicePdf(toPrintableInvoice(invoice.draft), { title: name });
       downloadFile(pdf, `${name}.pdf`, 'application/pdf');
-      await api.invoices.recordPdf(row.id).catch(() => {}); // The file is already saved; the count is a bonus.
+      try {
+        await api.invoices.uploadPdf(row.id, pdf);
+      } catch (error) {
+        setNotice({ kind: 'error', text: `The PDF was downloaded, but a copy could not be kept. ${error.message}` });
+      }
       reload();
     });
 
@@ -236,18 +295,33 @@ export default function HistoryPage() {
                           <span className={`badge ${row.status}`}>{row.status === 'paid' ? 'Paid' : 'Unpaid'}</span>
                         </td>
                         <td className="muted">
-                          {row.pdfCount > 0
-                            ? `${row.pdfCount} · ${formatDisplayDate(new Date(row.lastPdfAt))}`
-                            : 'None yet'}
+                          <PdfVersions row={row} />
                         </td>
                         <td>
                           <div className="row-actions">
                             <button type="button" className="button small" disabled={busy} onClick={() => openInvoice(row)}>
                               Open
                             </button>
-                            <button type="button" className="button small" disabled={busy} onClick={() => downloadPdf(row)}>
-                              PDF
-                            </button>
+                            {row.pdf?.upToDate ? (
+                              <a
+                                className="button small"
+                                href={api.invoices.pdfUrl(row.id, row.pdf.id)}
+                                download
+                                title={`Download the PDF made on ${formatDateTime(row.pdf.createdAt)}`}
+                              >
+                                PDF
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                className="button small"
+                                disabled={busy}
+                                onClick={() => makePdf(row)}
+                                title={row.pdf ? 'The invoice changed after its last PDF. Make a new one.' : 'Make the PDF'}
+                              >
+                                PDF
+                              </button>
+                            )}
                             <button type="button" className="button small" disabled={busy} onClick={() => toggleStatus(row)}>
                               {row.status === 'paid' ? 'Mark unpaid' : 'Mark paid'}
                             </button>

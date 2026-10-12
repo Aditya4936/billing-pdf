@@ -180,6 +180,31 @@ a.button {
   background: #fff3dc;
 }
 
+.pdf-versions .link-button {
+  font-weight: 400;
+  color: #555;
+  white-space: nowrap;
+}
+
+.pdf-versions ul {
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: 12px;
+  list-style: none;
+}
+
+.pdf-versions li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  white-space: nowrap;
+}
+
+.pdf-versions a {
+  color: #1f1f1f;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;
