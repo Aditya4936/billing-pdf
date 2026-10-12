@@ -1,7 +1,9 @@
 import './HistoryPage.css';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/api.js';
+import { invoiceListQuery, invoicePdfsQuery, refreshInvoiceData } from '../api/queries.js';
 import { useAuth } from '../auth/AuthContext.js';
 import { hasUnsavedWork, markSaved, saveDraft } from '../data/draftStorage.js';
 import { toPrintableInvoice } from '../data/invoiceModel.js';
@@ -23,20 +25,10 @@ const formatSize = (bytes) => `${Math.max(1, Math.round(bytes / 1024))} KB`;
  */
 function PdfVersions({ row }) {
   const [open, setOpen] = useState(false);
-  const [state, setState] = useState({ pdfs: null, error: '' });
-  const newestId = row.pdf?.id;
-
-  useEffect(() => {
-    if (!open) return undefined;
-    let active = true;
-    api.invoices.pdfs(row.id).then(
-      ({ pdfs }) => active && setState({ pdfs, error: '' }),
-      (error) => active && setState({ pdfs: null, error: error.message }),
-    );
-    return () => {
-      active = false;
-    };
-  }, [open, row.id, newestId]); // A newer PDF refreshes the list while it is open.
+  // Only asked once opened, and remembered: opening it again does not ask again. A newer PDF
+  // (a different newest id) is a different list, so it is asked for again.
+  const { data, error } = useQuery({ ...invoicePdfsQuery(row.id, row.pdf?.id), enabled: open });
+  const pdfs = data?.pdfs;
 
   if (row.pdfCount === 0) return 'None yet';
   const summary = `${row.pdfCount} · ${formatDisplayDate(new Date(row.lastPdfAt))}`;
@@ -49,9 +41,9 @@ function PdfVersions({ row }) {
       </button>
       {open && (
         <ul>
-          {state.error && <li>Could not load the files. {state.error}</li>}
-          {!state.pdfs && !state.error && <li>Loading…</li>}
-          {state.pdfs?.map((pdf) => (
+          {error && <li>Could not load the files. {error.message}</li>}
+          {!pdfs && !error && <li>Loading…</li>}
+          {pdfs?.map((pdf) => (
             <li key={pdf.id}>
               <span>
                 {formatDateTime(pdf.createdAt)} · {formatSize(pdf.size)}
@@ -61,7 +53,7 @@ function PdfVersions({ row }) {
               </a>
             </li>
           ))}
-          {state.pdfs?.length >= 10 && <li>The latest 10 files are kept.</li>}
+          {pdfs?.length >= 10 && <li>The latest 10 files are kept.</li>}
         </ul>
       )}
     </div>
@@ -72,12 +64,11 @@ function PdfVersions({ row }) {
 export default function HistoryPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const ids = { q: useId(), status: useId(), from: useId(), to: useId() };
+  const queryClient = useQueryClient();
+  const ids ={ q: useId(), status: useId(), from: useId(), to: useId() };
 
   const [filters, setFilters] = useState(NO_FILTERS);
   const [page, setPage] = useState(1);
-  const [reloads, setReloads] = useState(0);
-  const [result, setResult] = useState({ key: '', data: null, error: '' });
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState(null);
 
@@ -86,22 +77,14 @@ export default function HistoryPage() {
     () => ({ q, status: filters.status, from: filters.from, to: filters.to }),
     [q, filters.status, filters.from, filters.to],
   );
-  const requestKey = JSON.stringify({ params, page, reloads });
 
-  useEffect(() => {
-    let active = true;
-    api.invoices.list({ ...params, page, limit: PAGE_SIZE }).then(
-      (data) => active && setResult({ key: requestKey, data, error: '' }),
-      // Keep showing the last list if a refresh fails, with the reason above it.
-      (error) => active && setResult((previous) => ({ key: requestKey, data: previous.data, error: error.message })),
-    );
-    return () => {
-      active = false;
-    };
-  }, [params, page, requestKey]);
-
-  const { data, error: listError } = result;
-  const isLoading = result.key !== requestKey;
+  // Each combination of filters and page is remembered, so coming back to the page (or to a
+  // search already made) shows the list at once. While a new one loads, the previous stays
+  // on screen, dimmed.
+  const list = useQuery(invoiceListQuery({ ...params, page, limit: PAGE_SIZE }));
+  const { data } = list;
+  const listError = list.error?.message ?? '';
+  const isLoading = list.isPending || list.isPlaceholderData;
   const filtersActive = Object.values(filters).some(Boolean);
   const currentPage = data?.page ?? page;
 
@@ -114,7 +97,8 @@ export default function HistoryPage() {
     setFilters(NO_FILTERS);
     setPage(1);
   };
-  const reload = () => setReloads((count) => count + 1);
+  // Resolves when the list on screen is up to date, so the row stays disabled until then.
+  const reload = () => refreshInvoiceData(queryClient);
 
   /** Runs a row action, disabling that row meanwhile and reporting a failure in plain words. */
   async function onRow(row, failure, task) {
@@ -168,20 +152,20 @@ export default function HistoryPage() {
       } catch (error) {
         setNotice({ kind: 'error', text: `The PDF was downloaded, but a copy could not be kept. ${error.message}` });
       }
-      reload();
+      await reload();
     });
 
   const toggleStatus = (row) =>
     onRow(row, 'Could not change the status.', async () => {
       await api.invoices.setStatus(row.id, row.status === 'paid' ? 'unpaid' : 'paid');
-      reload();
+      await reload();
     });
 
   const removeInvoice = (row) => {
     if (!window.confirm(`Delete invoice ${row.invoiceNo} for ${row.buyerName}? This cannot be undone.`)) return;
     onRow(row, 'Could not delete the invoice.', async () => {
       await api.invoices.remove(row.id);
-      reload();
+      await reload();
     });
   };
 

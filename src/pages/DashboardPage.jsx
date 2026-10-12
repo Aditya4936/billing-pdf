@@ -1,7 +1,8 @@
 import './DashboardPage.css';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api/api.js';
+import { useQuery } from '@tanstack/react-query';
+import { statsQuery } from '../api/queries.js';
 import { serverDateToDisplay, toIsoDay } from '../utils/date.js';
 import { formatIndianAmount, formatRupees } from '../utils/format.js';
 import MonthlyChart from './MonthlyChart.jsx';
@@ -40,23 +41,13 @@ function Kpi({ label, value, note }) {
 export default function DashboardPage() {
   const rangeId = useId();
   const [range, setRange] = useState('fy');
-  const [reloads, setReloads] = useState(0);
-  const [result, setResult] = useState({ key: '', stats: null, error: '' });
 
-  const requestKey = `${range}:${reloads}`;
-  useEffect(() => {
-    let active = true;
-    api.stats.get(datesFor(range)).then(
-      (stats) => active && setResult({ key: requestKey, stats, error: '' }),
-      (error) => active && setResult((previous) => ({ key: requestKey, stats: previous.stats, error: error.message })),
-    );
-    return () => {
-      active = false;
-    };
-  }, [range, requestKey]);
-
-  const { stats, error } = result;
-  const isLoading = result.key !== requestKey;
+  // Each period is remembered, so coming back to the page (or to a period already viewed)
+  // shows the numbers at once. While a new period loads, the previous one stays, dimmed.
+  const query = useQuery(statsQuery(datesFor(range)));
+  const { data: stats } = query;
+  const error = query.error?.message ?? '';
+  const isLoading = query.isPending || query.isPlaceholderData;
   const totals = stats?.totals;
   const everythingEmpty = totals && range === 'all' && totals.invoices === 0;
 
@@ -80,7 +71,7 @@ export default function DashboardPage() {
         {error && (
           <p className="notice error" role="alert">
             Could not load the numbers. {error}{' '}
-            <button type="button" className="link-button" onClick={() => setReloads((count) => count + 1)}>
+            <button type="button" className="link-button" onClick={() => query.refetch()}>
               Try again
             </button>
           </p>

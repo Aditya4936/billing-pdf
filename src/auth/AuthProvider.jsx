@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, setSessionExpiredHandler } from '../api/api.js';
 import { clearDraft } from '../data/draftStorage.js';
 import { AuthContext } from './AuthContext.js';
 
 /** Knows who is logged in. Checks the cookie once on load, then follows login / logout. */
 export default function AuthProvider({ children }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState('loading');
   // True after the person chose to log out (as opposed to a session that simply ran out).
@@ -21,14 +23,16 @@ export default function AuthProvider({ children }) {
     };
   }, []);
 
-  // A 401 from any other request means the session ended: show the login page again.
+  // A 401 from any other request means the session ended: show the login page again. The
+  // remembered server data goes too, so whoever logs in next never sees this person's.
   useEffect(() => {
     setSessionExpiredHandler(() => {
+      queryClient.clear();
       setUser(null);
       setStatus('out');
     });
     return () => setSessionExpiredHandler(() => {});
-  }, []);
+  }, [queryClient]);
 
   const login = useCallback(async (credentials) => {
     const { user: me } = await api.auth.login(credentials);
@@ -51,11 +55,12 @@ export default function AuthProvider({ children }) {
       // Whatever the server said, this browser stops treating the person as logged in, and
       // the saved form is removed so the next person on a shared computer does not see it.
       if (user) clearDraft(user.id);
+      queryClient.clear();
       setUser(null);
       setStatus('out');
       setLoggedOut(true);
     }
-  }, [user]);
+  }, [user, queryClient]);
 
   const value = useMemo(
     () => ({ user, status, loggedOut, login, register, logout }),
